@@ -479,29 +479,61 @@ app.get('/health', (req, res) => {
 
 app.get('/movie/:tmdbId', async (req, res) => {
   const { tmdbId } = req.params;
+  const skipVidlink = req.query.skip_vidlink === '1';
   
   try {
-    // Try vidlink first (Go WASM)
-    console.log(`[Movie ${tmdbId}] Trying vidlink.pro...`);
-    const vidlinkResult = await extractVidlink(tmdbId);
-    
-    if (vidlinkResult.streamUrl) {
-      console.log(`[Movie ${tmdbId}] Vidlink SUCCESS`);
-      return res.json({
-        success: true,
-        type: 'movie',
-        tmdbId,
-        streamUrl: vidlinkResult.streamUrl,
-        provider: 'vidlink',
-        referer: 'https://videostr.net/',
-        headers: {
-          'Referer': 'https://videostr.net/',
-          'Origin': 'https://videostr.net',
+    // Try vidlink first (Go WASM) unless skipped
+    if (!skipVidlink) {
+      console.log(`[Movie ${tmdbId}] Trying vidlink.pro...`);
+      const vidlinkResult = await extractVidlink(tmdbId);
+      
+      if (vidlinkResult.streamUrl) {
+        // Check if stream is from storm.vodvidl.site - test it
+        if (vidlinkResult.streamUrl.includes('storm.vodvidl.site')) {
+          console.log(`[Movie ${tmdbId}] Testing storm.vodvidl.site...`);
+          const testUrl = encodeURIComponent(vidlinkResult.streamUrl);
+          try {
+            const testRes = await axios.get(
+              `https://renderrepo-ain0.onrender.com/m3u8-proxy?url=${testUrl}`,
+              { timeout: 10000 }
+            );
+            if (testRes.status !== 200 || !testRes.data.includes('#EXT')) {
+              console.log(`[Movie ${tmdbId}] storm.vodvidl.site returned 403, trying backups...`);
+            } else {
+              console.log(`[Movie ${tmdbId}] Vidlink SUCCESS`);
+              return res.json({
+                success: true,
+                type: 'movie',
+                tmdbId,
+                streamUrl: vidlinkResult.streamUrl,
+                provider: 'vidlink',
+                referer: 'https://videostr.net/',
+                headers: {
+                  'Referer': 'https://videostr.net/',
+                  'Origin': 'https://videostr.net',
+                }
+              });
+            }
+          } catch (testErr) {
+            console.log(`[Movie ${tmdbId}] storm.vodvidl.site test failed: ${testErr.message}, trying backups...`);
+          }
+        } else {
+          console.log(`[Movie ${tmdbId}] Vidlink SUCCESS`);
+          return res.json({
+            success: true,
+            type: 'movie',
+            tmdbId,
+            streamUrl: vidlinkResult.streamUrl,
+            provider: 'vidlink',
+            referer: 'https://videostr.net/',
+            headers: {
+              'Referer': 'https://videostr.net/',
+              'Origin': 'https://videostr.net',
+            }
+          });
         }
-      });
+      } else {
     }
-    
-    console.log(`[Movie ${tmdbId}] Vidlink failed, trying backups...`);
     
     // Fallback to backup providers
     const backupStreams = await getAllBackupStreams(tmdbId, 'movie', null, null);
