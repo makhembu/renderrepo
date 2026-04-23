@@ -487,14 +487,19 @@ app.get('/movie/:tmdbId', async (req, res) => {
     if (vidlinkResult.streamUrl) {
       if (vidlinkResult.streamUrl.includes('storm.vodvidl.site')) {
         console.log(`[Movie ${tmdbId}] Testing storm.vodvidl.site...`);
-        const testUrl = encodeURIComponent(vidlinkResult.streamUrl);
+        const testUrl = vidlinkResult.streamUrl;
         try {
-          const testRes = await axios.get(
-            `https://renderrepo-ain0.onrender.com/m3u8-proxy?url=${testUrl}`,
-            { timeout: 10000 }
-          );
+          const testRes = await axios.get(testUrl, {
+            timeout: 10000,
+            headers: {
+              'User-Agent': MODERN_UA,
+              'Referer': 'https://videostr.net/',
+              'Origin': 'https://videostr.net',
+            },
+            validateStatus: () => true,
+          });
           if (testRes.status !== 200 || !testRes.data.includes('#EXT')) {
-            console.log(`[Movie ${tmdbId}] storm.vodvidl.site returned 403, trying backups...`);
+            console.log(`[Movie ${tmdbId}] storm.vodvidl.site returned ${testRes.status}, trying backups...`);
           } else {
             console.log(`[Movie ${tmdbId}] Vidlink SUCCESS`);
             return res.json({
